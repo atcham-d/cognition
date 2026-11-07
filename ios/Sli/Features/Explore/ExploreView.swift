@@ -146,6 +146,7 @@ private struct StopCard: View {
     let stop: Stop
     @State private var arrivals: [Arrival] = []
     @State private var loaded = false
+    @State private var failed = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -171,7 +172,9 @@ private struct StopCard: View {
                     MinutesLabel(minutes: a.minutes, isLive: a.isLive)
                 }
             }
-            if loaded && arrivals.isEmpty {
+            if failed {
+                Text("Couldn't load departures").font(.caption).foregroundStyle(.secondary)
+            } else if loaded && arrivals.isEmpty {
                 Text("No departures in the next 90 min").font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -179,7 +182,13 @@ private struct StopCard: View {
         .frame(width: 260, alignment: .leading)
         .glassEffect(.regular.interactive(), in: .rect(cornerRadius: Theme.cardRadius))
         .task {
-            arrivals = (try? await state.transit.arrivals(for: stop)) ?? []
+            do {
+                arrivals = try await state.transit.arrivals(for: stop)
+                failed = false
+            } catch {
+                arrivals = []
+                failed = true
+            }
             loaded = true
         }
     }
