@@ -21,9 +21,14 @@ def create_app(db_path: str | None = None, feed: RealtimeFeed | None = None,
 
     def db() -> sqlite3.Connection:
         # sync endpoints run in a threadpool; sqlite connections must not be shared across threads
+        # reopen when ingest atomically replaces the file, so all workers see the same cluster ids
+        ino = os.stat(db_path).st_ino
         conn = getattr(local, "conn", None)
-        if conn is None:
+        if conn is None or local.ino != ino:
+            if conn is not None:
+                conn.close()
             conn = local.conn = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            local.ino = ino
         return conn
 
     @asynccontextmanager

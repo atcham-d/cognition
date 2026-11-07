@@ -56,3 +56,18 @@ def test_realtime_cache_expires_after_sustained_outage():
     assert "T1" in feed.get()
     feed._ok_at -= 10 * 60
     assert feed.get() is None
+
+
+def test_rebuilt_database_is_picked_up_by_existing_workers(db_path, tmp_path):
+    import shutil
+    copy = tmp_path / "gtfs.db"
+    shutil.copy(db_path, copy)
+    with TestClient(create_app(str(copy), feed=RealtimeFeed(None), clock=lambda: NOW)) as c:
+        assert c.get("/api/stops/search", params={"q": "market"}).json()
+        tmp = tmp_path / "new.db"
+        shutil.copy(db_path, tmp)
+        import sqlite3
+        with sqlite3.connect(tmp) as w:
+            w.execute("UPDATE clusters SET name='Renamed Sq', search=replace(search, 'market', 'renamed') WHERE name='Market Sq'")
+        tmp.replace(copy)
+        assert c.get("/api/stops/search", params={"q": "renamed"}).json()[0]["name"] == "Renamed Sq"
