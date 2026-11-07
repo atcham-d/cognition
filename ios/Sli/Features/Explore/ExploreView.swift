@@ -145,6 +145,7 @@ private struct StopCard: View {
     @Environment(AppState.self) private var state
     let stop: Stop
     @State private var arrivals: [Arrival] = []
+    @State private var loaded = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -163,13 +164,23 @@ private struct StopCard: View {
                     Text(a.route).font(.subheadline.weight(.bold)).fontDesign(.rounded)
                     Text(a.headsign).font(.caption).foregroundStyle(.secondary).lineLimit(1)
                     Spacer()
+                    if !a.isLive {
+                        Image(systemName: a.status.symbol).font(.caption2).foregroundStyle(a.status.color)
+                            .accessibilityLabel(a.status.title)
+                    }
                     MinutesLabel(minutes: a.minutes, isLive: a.isLive)
                 }
+            }
+            if loaded && arrivals.isEmpty {
+                Text("No departures in the next 90 min").font(.caption).foregroundStyle(.secondary)
             }
         }
         .padding(16)
         .frame(width: 260, alignment: .leading)
         .glassEffect(.regular.interactive(), in: .rect(cornerRadius: Theme.cardRadius))
-        .task { arrivals = (try? await state.transit.arrivals(for: stop)) ?? [] }
+        .task {
+            arrivals = (try? await state.transit.arrivals(for: stop)) ?? []
+            loaded = true
+        }
     }
 }

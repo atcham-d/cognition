@@ -6,7 +6,7 @@ struct LiveTransitService: TransitService {
     let baseURL: URL
     var session: URLSession = .shared
 
-    var sourceLabel: String { "TFI timetable + NTA live" }
+    var sourceLabel: String { "TFI timetable, plus NTA live tracking when available" }
 
     static let defaultURL = URL(string: "http://127.0.0.1:8000")!
 
