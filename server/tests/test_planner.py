@@ -87,3 +87,24 @@ def test_plan_trip_arrive_by_picks_latest_departure_that_makes_it(conn):
     too_early = planner.plan_trip(conn, 53.2995, -6.2000, 53.3105, -6.2000, MON_0755,
                                   arrive_by=datetime(2026, 11, 9, 8, 5, tzinfo=TZ))
     assert too_early["options"] == []
+
+
+def test_window_crossing_midnight_includes_next_service_day(conn):
+    a, b = cluster(conn, "1234"), cluster(conn, "market")
+    out = planner.departures(conn, a, b, datetime(2026, 11, 8, 23, 50, tzinfo=TZ), window_min=600)
+    assert [(d["trip_id"], d["service_date"]) for d in out] == [("T1", "2026-11-09")]
+
+
+def test_departures_you_cannot_reach_in_time_are_dropped(conn):
+    a, b = cluster(conn, "1234"), cluster(conn, "market")
+    assert planner.departures(conn, a, b, MON_0755, walk_min=10) == []
+    assert planner.departures(conn, a, b, MON_0755, walk_min=6)[0]["trip_id"] == "T1"
+
+
+def test_late_running_vehicle_past_schedule_is_still_found(conn):
+    a, b = cluster(conn, "1234"), cluster(conn, "market")
+    rt = parse_trip_updates({"entity": [{"trip_update": {
+        "trip": {"trip_id": "T1", "start_date": "20261109"},
+        "stop_time_update": [{"stop_sequence": 1, "departure": {"delay": 25 * 60}}]}}]})
+    out = planner.departures(conn, a, b, datetime(2026, 11, 9, 8, 20, tzinfo=TZ), realtime=rt)
+    assert out[0]["trip_id"] == "T1" and out[0]["status"] == "live" and out[0]["minutes"] == 5

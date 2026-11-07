@@ -8,6 +8,9 @@ from .realtime import TripRealtime
 
 TZ = ZoneInfo("Europe/Dublin")
 MISSED_GRACE_S = 60
+RUN_GRACE_S = 2 * 60  # a commute you can still catch by hurrying
+LOOKBACK_S = 15 * 60
+RT_LOOKBACK_S = 90 * 60  # late-running vehicles can still be ahead of us
 UNCONFIRMED_WITHIN_S = 20 * 60  # vehicles this close should already be tracked
 WALK_M_PER_MIN = 75  # ~4.5 km/h, with a detour factor applied to straight-line distance
 WALK_DETOUR = 1.3
@@ -100,8 +103,9 @@ def _status(live: bool, canceled: bool, realtime_on: bool, secs_away: float) -> 
     return "scheduled"
 
 
-def _service_windows(conn, now: datetime, window_min: int, lookback_s: int = 15 * 60):
-    for d in (now.date() - timedelta(days=1), now.date()):
+def _service_windows(conn, now: datetime, window_min: int, realtime=None):
+    lookback_s = RT_LOOKBACK_S if realtime else LOOKBACK_S
+    for d in (now.date() - timedelta(days=1), now.date(), now.date() + timedelta(days=1)):
         services = active_services(conn, d)
         if not services:
             continue
@@ -167,7 +171,7 @@ def stop_arrivals(conn: sqlite3.Connection, cluster_id: int, now: datetime, wind
     """Next departures from any platform/pole in a stop cluster."""
     now = now.astimezone(TZ)
     seen, results = set(), []
-    for d, base, services, lo, hi in _service_windows(conn, now, window_min):
+    for d, base, services, lo, hi in _service_windows(conn, now, window_min, realtime):
         sql = ARRIVALS_SQL.format(services=",".join("?" * len(services)))
         for trip_id, seq, dep, stop_id, route, mode, headsign in conn.execute(
                 sql, (cluster_id, lo, hi, *services)):
@@ -206,7 +210,7 @@ def _direct(conn, from_ids: list[int], to_ids: list[int], now: datetime, window_
             realtime: dict[str, TripRealtime] | None) -> list[dict]:
     """Direct (single-vehicle) trips from any origin cluster to any destination cluster."""
     candidates: dict[tuple, dict] = {}
-    for d, base, services, lo, hi in _service_windows(conn, now, window_min):
+    for d, base, services, lo, hi in _service_windows(conn, now, window_min, realtime):
         sql = DEPARTURES_SQL.format(origins=",".join("?" * len(from_ids)), dests=",".join("?" * len(to_ids)),
                                     services=",".join("?" * len(services)))
         for row in conn.execute(sql, (*from_ids, *to_ids, lo, hi, *services)):
@@ -246,6 +250,7 @@ def departures(conn: sqlite3.Connection, from_id: int, to_id: int, now: datetime
         r["leave_at"] = leave_at.isoformat()
         r["leave_in_s"] = int((leave_at - now).total_seconds())
         r["duration_min"] = round((r["_exp_arr"] - r["_exp_dep"]).total_seconds() / 60)
+    rows = [r for r in rows if r["leave_in_s"] >= -RUN_GRACE_S]
     return _strip(rows[:limit])
 
 
