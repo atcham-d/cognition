@@ -18,6 +18,7 @@ struct PlanDetailView: View {
                     VStack(alignment: .leading, spacing: 20) {
                         titleBlock(plan)
                         statusButtons(plan)
+                        GetThereCard(plan: plan)
                         SectionHeader(title: "Who's coming", trailing: "\(plan.attendees.filter { $0.rsvp == .going }.count) going")
                         GlassCard {
                             VStack(spacing: 14) { ForEach(plan.attendees) { AttendeeRow(attendee: $0, tint: plan.tint) } }

@@ -4,12 +4,9 @@ struct SearchView: View {
     @Environment(AppState.self) private var state
     @State private var query = ""
     @State private var selectedStop: Stop?
+    @State private var results: [Stop] = []
 
-    private var stops: [Stop] {
-        query.isEmpty ? state.stops : state.stops.filter {
-            $0.name.localizedCaseInsensitiveContains(query) || $0.routes.contains { $0.localizedCaseInsensitiveContains(query) }
-        }
-    }
+    private var stops: [Stop] { query.isEmpty ? state.stops : results }
 
     private var friends: [Friend] {
         query.isEmpty ? [] : state.friends.filter {
@@ -41,7 +38,12 @@ struct SearchView: View {
             .scrollContentBackground(.hidden)
             .background(AuroraBackground())
             .navigationTitle("Search")
-            .searchable(text: $query, prompt: "Stops, routes, friends")
+            .searchable(text: $query, prompt: "Stops, pole numbers, friends")
+            .task(id: query) {
+                guard !query.isEmpty else { results = []; return }
+                try? await Task.sleep(for: .milliseconds(250))
+                results = (try? await state.transit.searchStops(query)) ?? []
+            }
             .sheet(item: $selectedStop) { StopDetailView(stop: $0).presentationDetents([.medium, .large]) }
         }
     }

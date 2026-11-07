@@ -1,11 +1,18 @@
 import Foundation
 
 protocol TransitService: Sendable {
+    /// Short attribution shown in the UI so users know where times come from.
+    var sourceLabel: String { get }
     func nearbyStops(around point: GeoPoint) async throws -> [Stop]
     func arrivals(for stop: Stop) async throws -> [Arrival]
+    func searchStops(_ query: String) async throws -> [Stop]
+    func journeys(from: Stop, to: Stop, walkMinutes: Int) async throws -> [Journey]
+    func trip(from: GeoPoint, to: GeoPoint, arriveBy: Date?) async throws -> TripPlan
 }
 
 struct MockTransitService: TransitService {
+    var sourceLabel: String { "Sample data" }
+
     static let stops: [Stop] = [
         Stop(id: "oconnell", name: "O'Connell St Upper", code: "271", location: .init(lat: 53.3521, lon: -6.2605),
              modes: [.bus], routes: ["46A", "16", "13", "40", "123"]),
@@ -29,6 +36,10 @@ struct MockTransitService: TransitService {
         Self.stops.sorted { distance($0.location, point) < distance($1.location, point) }
     }
 
+    func searchStops(_ query: String) async throws -> [Stop] {
+        Self.stops.filter { $0.name.localizedCaseInsensitiveContains(query) || $0.code.localizedCaseInsensitiveContains(query) }
+    }
+
     func arrivals(for stop: Stop) async throws -> [Arrival] {
         let headsigns: [TransitMode: [String]] = [
             .bus: ["Dún Laoghaire", "Ballymun", "Santry", "Charlestown", "Kilnamanagh"],
@@ -42,11 +53,27 @@ struct MockTransitService: TransitService {
             let route = mode == .bus ? stop.routes.filter { Int($0.prefix(2)) != nil }.randomElement(using: &rng) ?? "46A"
                 : mode == .luas ? (stop.routes.first { $0 == "Red" || $0 == "Green" } ?? "Green")
                 : mode == .dart ? "DART" : "Rail"
+            let status: ArrivalStatus = i < 3 ? .live : i == 3 ? .unconfirmed : .scheduled
             return Arrival(id: "\(stop.id)-\(i)", route: route,
                            headsign: headsigns[mode]!.randomElement(using: &rng)!,
-                           mode: mode, minutes: i * 4 + Int.random(in: 0...3, using: &rng),
-                           isLive: i < 6, crowding: Double.random(in: 0.1...0.95, using: &rng))
+                           mode: mode, minutes: i * 4 + Int.random(in: 0...3, using: &rng), status: status)
         }
+    }
+
+    func journeys(from: Stop, to: Stop, walkMinutes: Int) async throws -> [Journey] {
+        let now = Date()
+        return try await arrivals(for: from).prefix(4).map { a in
+            let departs = now.addingTimeInterval(Double(a.minutes) * 60)
+            return Journey(id: a.id, route: a.route, mode: a.mode, headsign: a.headsign, fromStop: from.name,
+                           fromCode: from.code, toStop: to.name, departs: departs,
+                           arrives: departs.addingTimeInterval(12 * 60),
+                           leaveAt: departs.addingTimeInterval(-Double(walkMinutes) * 60),
+                           walkToMinutes: walkMinutes, status: a.status)
+        }
+    }
+
+    func trip(from: GeoPoint, to: GeoPoint, arriveBy: Date?) async throws -> TripPlan {
+        TripPlan(walkOnlyMinutes: 20, options: [])
     }
 
     private func distance(_ a: GeoPoint, _ b: GeoPoint) -> Double {

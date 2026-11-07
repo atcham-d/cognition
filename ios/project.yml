@@ -40,6 +40,9 @@ targets:
       properties:
         SupabaseURL: $(SUPABASE_URL)
         SupabaseAnonKey: $(SUPABASE_ANON_KEY)
+        TransitAPIURL: $(TRANSIT_API_URL)
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
         LSApplicationQueriesSchemes: [leaptopup, tfigo]
         UIBackgroundModes: [location]
   SliTests:
