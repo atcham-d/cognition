@@ -16,6 +16,16 @@ struct RootView: View {
         return .explore
         #endif
     }()
+    @State private var showCommute = false
+
+    /// Debug launch arg `-accessory commute` shows the commute in the accessory even while a plan is live.
+    fileprivate static var accessoryPlan: Bool {
+        #if DEBUG
+        UserDefaults.standard.string(forKey: "accessory") != "commute"
+        #else
+        true
+        #endif
+    }
 
     var body: some View {
         TabView(selection: $tab) {
@@ -28,7 +38,16 @@ struct RootView: View {
         }
         .tabBarMinimizeBehavior(.onScrollDown)
         .tabViewBottomAccessory {
-            NextUpAccessory { tab = state.livePlan != nil ? .plans : .explore }
+            NextUpAccessory {
+                if Self.accessoryPlan && state.livePlan != nil { tab = .plans } else { showCommute = true }
+            }
+        }
+        .sheet(isPresented: $showCommute) { CommuteView() }
+        .task {
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(45))
+                await state.refreshCommute()
+            }
         }
     }
 }
@@ -40,7 +59,7 @@ private struct NextUpAccessory: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                if let plan = state.livePlan {
+                if RootView.accessoryPlan, let plan = state.livePlan {
                     Image(systemName: plan.symbol).foregroundStyle(plan.tint)
                     VStack(alignment: .leading, spacing: 0) {
                         Text(plan.title).font(.subheadline.weight(.semibold)).lineLimit(1)
@@ -49,6 +68,20 @@ private struct NextUpAccessory: View {
                     }
                     Spacer()
                     LivePulse(color: plan.tint)
+                } else if let next = state.nextCommuteJourney {
+                    ModeBadge(mode: next.mode, route: next.route, compact: true)
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        let leaveIn = next.leaveAt.timeIntervalSince(context.date)
+                        VStack(alignment: .leading, spacing: 0) {
+                            Text(LeaveIn.headline(leaveIn))
+                                .font(.subheadline.weight(.heavy)).foregroundStyle(LeaveIn.color(leaveIn))
+                            Text("\(next.fromStop) \(next.departs, format: .dateTime.hour().minute())")
+                                .font(.caption2).foregroundStyle(.secondary).lineLimit(1)
+                        }
+                    }
+                    Spacer()
+                    Image(systemName: next.status.symbol).foregroundStyle(next.status.color)
+                        .accessibilityLabel(next.status.title)
                 } else if let next = state.nextDeparture {
                     ModeBadge(mode: next.arrival.mode, route: next.arrival.route, compact: true)
                     Text(next.stop.name).font(.subheadline.weight(.semibold)).lineLimit(1)

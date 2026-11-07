@@ -40,7 +40,7 @@ struct GeoPoint: Codable, Hashable, Sendable {
     var coordinate: CLLocationCoordinate2D { .init(latitude: lat, longitude: lon) }
 }
 
-struct Stop: Identifiable, Hashable, Sendable {
+struct Stop: Identifiable, Hashable, Codable, Sendable {
     let id: String
     let name: String
     let code: String
@@ -50,14 +50,99 @@ struct Stop: Identifiable, Hashable, Sendable {
     var primaryMode: TransitMode { modes.first ?? .bus }
 }
 
+/// How much to trust a departure time. Never present a timetable time as if it were tracked.
+enum ArrivalStatus: String, Codable, Sendable {
+    /// Vehicle is reporting its position; time includes delay.
+    case live
+    /// Due soon but not reporting: the classic "ghost bus" risk.
+    case unconfirmed
+    /// Timetable only (too far out to be tracked yet, or live feed unavailable).
+    case scheduled
+    case cancelled
+
+    var title: String {
+        switch self {
+        case .live: "Live"
+        case .unconfirmed: "Unconfirmed"
+        case .scheduled: "Timetable"
+        case .cancelled: "Cancelled"
+        }
+    }
+
+    var explanation: String {
+        switch self {
+        case .live: "Tracked right now"
+        case .unconfirmed: "Not tracked yet, may not run"
+        case .scheduled: "Timetable time, not tracked"
+        case .cancelled: "Operator cancelled this one"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .live: "dot.radiowaves.left.and.right"
+        case .unconfirmed: "questionmark.circle.fill"
+        case .scheduled: "calendar"
+        case .cancelled: "xmark.octagon.fill"
+        }
+    }
+
+    var color: Color {
+        switch self {
+        case .live: Theme.accent
+        case .unconfirmed: Theme.gold
+        case .scheduled: .secondary
+        case .cancelled: Theme.ember
+        }
+    }
+}
+
 struct Arrival: Identifiable, Hashable, Sendable {
     let id: String
     let route: String
     let headsign: String
     let mode: TransitMode
     var minutes: Int
-    let isLive: Bool
-    var crowding: Double
+    var status: ArrivalStatus = .scheduled
+    var delayMinutes: Int? = nil
+    /// nil when there is no occupancy data (the NTA feed doesn't provide it for Dublin today).
+    var crowding: Double? = nil
+    var isLive: Bool { status == .live }
+}
+
+/// One way to get from A to B on a single vehicle, including the walks either side.
+struct Journey: Identifiable, Hashable, Sendable {
+    let id: String
+    let route: String
+    let mode: TransitMode
+    let headsign: String
+    let fromStop: String
+    let fromCode: String
+    let toStop: String
+    let departs: Date
+    let arrives: Date
+    let leaveAt: Date
+    var walkToMinutes: Int
+    var walkFromMinutes: Int = 0
+    var status: ArrivalStatus
+    var delayMinutes: Int? = nil
+
+    var arriveAtDoor: Date { arrives.addingTimeInterval(Double(walkFromMinutes) * 60) }
+}
+
+struct TripPlan: Sendable {
+    var walkOnlyMinutes: Int
+    var options: [Journey]
+    /// True when nothing gets you there by the requested time and these are the earliest arrivals instead.
+    var late = false
+}
+
+struct Commute: Codable, Hashable, Sendable {
+    var from: Stop
+    var to: Stop
+    var walkMinutes: Int
+
+    var reversed: Commute { Commute(from: to, to: from, walkMinutes: walkMinutes) }
 }
 
 enum FriendStatus: Hashable, Sendable {

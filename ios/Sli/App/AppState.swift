@@ -14,10 +14,32 @@ final class AppState {
     var challenges: [Challenge] = SampleData.challenges
     var shareMode: ShareMode = .precise
     var nextDeparture: (stop: Stop, arrival: Arrival)?
+    var commute: Commute? { didSet { saveCommute() } }
+    var commuteJourneys: [Journey] = []
+    var commuteLoading = false
+    var commuteError: String?
 
-    init(transit: any TransitService = MockTransitService()) {
+    init(transit: any TransitService = MockTransitService(), defaults: UserDefaults = .standard) {
         self.transit = transit
+        self.defaults = defaults
+        if let data = defaults.data(forKey: Self.commuteKey) {
+            commute = try? JSONDecoder().decode(Commute.self, from: data)
+        }
     }
+
+    private let defaults: UserDefaults
+    private static let commuteKey = "commute.v1"
+
+    /// The next departure you can still make for your commute (skipping cancelled ones).
+    var nextCommuteJourney: Journey? { commuteJourneys.first { $0.status != .cancelled } }
+    var commutePlanB: [Journey] {
+        let next = nextCommuteJourney
+        return Array(commuteJourneys.filter { $0 != next }.prefix(4))
+    }
+
+    /// Where "Get me there" starts: your commute's home stop if set, otherwise the map centre.
+    var tripOrigin: GeoPoint { commute?.from.location ?? center }
+    var tripOriginName: String { commute?.from.name ?? "city centre" }
 
     var livePlan: Plan? { plans.first(where: \.isLive) }
     var upcomingPlans: [Plan] { plans.filter { !$0.isLive }.sorted { $0.date < $1.date } }
@@ -31,8 +53,53 @@ final class AppState {
 
     func load() async {
         stops = (try? await transit.nearbyStops(around: center)) ?? []
-        if let fav = favouriteStops.first, let first = try? await transit.arrivals(for: fav).first {
+        let fav = favouriteStops.first ?? stops.first
+        if let fav, let first = try? await transit.arrivals(for: fav).first {
             nextDeparture = (fav, first)
+        }
+        if commute == nil { await seedDemoCommute() }
+        await refreshCommute()
+    }
+
+    func refreshCommute() async {
+        guard let commute else { commuteJourneys = []; return }
+        commuteLoading = true
+        defer { commuteLoading = false }
+        do {
+            let all = try await transit.journeys(from: commute.from, to: commute.to, walkMinutes: commute.walkMinutes)
+            commuteJourneys = all.filter { $0.status != .cancelled } + all.filter { $0.status == .cancelled }
+            commuteError = nil
+        } catch {
+            commuteError = "Couldn't reach the transit server"
+        }
+    }
+
+    func swapCommute() async {
+        commute = commute?.reversed
+        await refreshCommute()
+    }
+
+    /// Door-to-door trip for a plan; if nothing arrives on time, falls back to the earliest arrival.
+    func trip(to plan: Plan) async throws -> TripPlan {
+        let onTime = try await transit.trip(from: tripOrigin, to: plan.location, arriveBy: plan.date)
+        if !onTime.options.isEmpty || plan.date.timeIntervalSinceNow > 3 * 3600 { return onTime }
+        var asap = try await transit.trip(from: tripOrigin, to: plan.location, arriveBy: nil)
+        asap.late = !asap.options.isEmpty
+        return asap
+    }
+
+    private func seedDemoCommute() async {
+        let (fromQuery, toQuery) = SampleData.demoCommute
+        guard let from = try? await transit.searchStops(fromQuery).first,
+              let to = try? await transit.searchStops(toQuery).first else { return }
+        commute = Commute(from: from, to: to, walkMinutes: 5)
+    }
+
+    private func saveCommute() {
+        if let commute, let data = try? JSONEncoder().encode(commute) {
+            defaults.set(data, forKey: Self.commuteKey)
+        } else {
+            defaults.removeObject(forKey: Self.commuteKey)
         }
     }
 
@@ -57,6 +124,8 @@ final class AppState {
 }
 
 enum SampleData {
+    static let demoCommute = ("Ranelagh", "St Stephen's Green")
+
     static let friends: [Friend] = [
         Friend(id: "aoife", name: "Aoife Byrne", handle: "aoife", seed: 0, location: .init(lat: 53.3440, lon: -6.2672),
                status: .onTransit(mode: .luas, route: "Green", toward: "St Stephen's Green", etaMinutes: 4), level: 12, streak: 21),

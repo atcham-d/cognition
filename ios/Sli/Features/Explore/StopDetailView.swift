@@ -56,9 +56,13 @@ struct StopDetailView: View {
             }
             Text(stop.name).font(.largeTitle.weight(.bold)).fontDesign(.rounded)
             HStack(spacing: 6) {
-                LivePulse()
-                Text("Live from NTA · updated just now").font(.caption).foregroundStyle(.secondary)
+                let live = arrivals.filter(\.isLive).count
+                if live > 0 { LivePulse() } else { Image(systemName: "calendar").font(.caption) }
+                Text(live > 0 ? "\(live) tracked live · \(arrivals.count - live) timetable only"
+                              : "Timetable times only, nothing tracked yet")
+                    .font(.caption).foregroundStyle(.secondary)
             }
+            Text("Source: \(state.transit.sourceLabel)").font(.caption2).foregroundStyle(.tertiary)
         }
     }
 
@@ -101,7 +105,11 @@ private struct ArrivalRow: View {
                 .frame(minWidth: 64, alignment: .leading)
             VStack(alignment: .leading, spacing: 4) {
                 Text(arrival.headsign).font(.headline).lineLimit(1)
-                CrowdingBar(level: arrival.crowding)
+                    .strikethrough(arrival.status == .cancelled)
+                HStack(spacing: 6) {
+                    StatusChip(status: arrival.status, delayMinutes: arrival.delayMinutes)
+                    if let crowding = arrival.crowding { CrowdingBar(level: crowding) }
+                }
             }
             Spacer()
             MinutesLabel(minutes: arrival.minutes, isLive: arrival.isLive)
