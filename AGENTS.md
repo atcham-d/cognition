@@ -16,7 +16,7 @@ xcodebuild -project Sli.xcodeproj -scheme Sli -destination 'platform=iOS Simulat
 xcodebuild -project Sli.xcodeproj -scheme Sli -destination 'platform=iOS Simulator,name=iPhone 18 Pro' -derivedDataPath build test
 xcrun simctl install booted build/Build/Products/Debug-iphonesimulator/Sli.app && xcrun simctl launch booted ie.sli.app -tab plans
 ```
-Debug launch arg `-tab plans|friends|you` opens a specific tab (for screenshots). `-mockTransit YES` uses sample transit data instead of the server at `TRANSIT_API_URL` (default `http://127.0.0.1:8000`).
+Debug launch arg `-tab plans|friends|you` opens a specific tab (for screenshots); `-accessory commute` shows the commute in the bottom accessory even while a plan is live. `-mockTransit YES` uses sample transit data instead of the server at `TRANSIT_API_URL` (default `http://127.0.0.1:8000`).
 
 ## Conventions
 - Swift 6 strict concurrency; `@MainActor @Observable` state in `AppState`.
