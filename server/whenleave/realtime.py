@@ -8,6 +8,7 @@ from typing import Callable
 import httpx
 
 log = logging.getLogger(__name__)
+MAX_STALE_S = 5 * 60  # past this, predictions are worse than the timetable
 TRIP_UPDATES_URL = "https://api.nationaltransport.ie/gtfsr/v2/TripUpdates?format=json"
 
 
@@ -101,6 +102,7 @@ class RealtimeFeed:
         self._cache: dict[str, TripRealtime] = {}
         self._fetched_at = 0.0
         self._ok = False
+        self._ok_at = 0.0
         self._lock = threading.Lock()
 
     @property
@@ -123,7 +125,8 @@ class RealtimeFeed:
                 try:
                     self._cache = parse_trip_updates(self._fetcher())
                     self._ok = True
-                except Exception as exc:  # keep serving stale data / schedule rather than failing
+                    self._ok_at = self._fetched_at
+                except Exception as exc:  # briefly serve stale data, then fall back to schedule
                     log.warning("realtime fetch failed: %s", exc)
-                    self._ok = bool(self._cache)
+                    self._ok = bool(self._cache) and time.monotonic() - self._ok_at < MAX_STALE_S
             return self._cache if self._ok else None

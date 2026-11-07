@@ -44,3 +44,15 @@ def test_realtime_feed_failure_falls_back_to_schedule(db_path):
         body = c.get(f"/api/stops/{market}/arrivals").json()
         assert body["realtime"] is False
         assert body["arrivals"][0]["status"] == "scheduled"
+
+
+def test_realtime_cache_expires_after_sustained_outage():
+    calls = iter([{"entity": [{"trip_update": {"trip": {"trip_id": "T1"}}}]}])
+
+    def flaky():
+        return next(calls)
+    feed = RealtimeFeed(None, ttl=0, fetcher=flaky)
+    assert "T1" in feed.get()
+    assert "T1" in feed.get()
+    feed._ok_at -= 10 * 60
+    assert feed.get() is None
