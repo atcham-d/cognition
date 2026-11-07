@@ -18,6 +18,15 @@ struct RootView: View {
     }()
     @State private var showCommute = false
 
+    /// Debug launch arg `-accessory commute` shows the commute in the accessory even while a plan is live.
+    fileprivate static var accessoryPlan: Bool {
+        #if DEBUG
+        UserDefaults.standard.string(forKey: "accessory") != "commute"
+        #else
+        true
+        #endif
+    }
+
     var body: some View {
         TabView(selection: $tab) {
             Tab("Explore", systemImage: "map.fill", value: .explore) { ExploreView() }
@@ -30,7 +39,7 @@ struct RootView: View {
         .tabBarMinimizeBehavior(.onScrollDown)
         .tabViewBottomAccessory {
             NextUpAccessory {
-                if state.livePlan != nil { tab = .plans } else { showCommute = true }
+                if Self.accessoryPlan && state.livePlan != nil { tab = .plans } else { showCommute = true }
             }
         }
         .sheet(isPresented: $showCommute) { CommuteView() }
@@ -50,7 +59,7 @@ private struct NextUpAccessory: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: 10) {
-                if let plan = state.livePlan {
+                if RootView.accessoryPlan, let plan = state.livePlan {
                     Image(systemName: plan.symbol).foregroundStyle(plan.tint)
                     VStack(alignment: .leading, spacing: 0) {
                         Text(plan.title).font(.subheadline.weight(.semibold)).lineLimit(1)
