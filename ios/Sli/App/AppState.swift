@@ -31,7 +31,11 @@ final class AppState {
     private static let commuteKey = "commute.v1"
 
     /// The next departure you can still make for your commute (skipping cancelled ones).
-    var nextCommuteJourney: Journey? { commuteJourneys.first }
+    var nextCommuteJourney: Journey? { commuteJourneys.first { $0.status != .cancelled } }
+    var commutePlanB: [Journey] {
+        let next = nextCommuteJourney
+        return Array(commuteJourneys.filter { $0 != next }.prefix(4))
+    }
 
     /// Where "Get me there" starts: your commute's home stop if set, otherwise the map centre.
     var tripOrigin: GeoPoint { commute?.from.location ?? center }

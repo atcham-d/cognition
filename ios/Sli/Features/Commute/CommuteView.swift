@@ -13,20 +13,22 @@ struct CommuteView: View {
                 VStack(alignment: .leading, spacing: 20) {
                     if let commute = state.commute {
                         routeHeader(commute)
-                        if let next = state.commuteJourneys.first {
+                        if let next = state.nextCommuteJourney {
                             LeaveHero(journey: next)
                         } else if state.commuteLoading {
                             ProgressView().frame(maxWidth: .infinity, minHeight: 160)
                         } else {
                             GlassCard {
-                                Label(state.commuteError ?? "No direct departures in the next 2 hours",
+                                Label(state.commuteError ?? (state.commuteJourneys.isEmpty
+                                      ? "No direct departures in the next 2 hours"
+                                      : "Every direct departure in the next 2 hours is cancelled"),
                                       systemImage: "moon.zzz.fill")
                             }
                         }
-                        if state.commuteJourneys.count > 1 {
+                        if !state.commutePlanB.isEmpty {
                             SectionHeader(title: "Plan B", trailing: "if that one vanishes")
                             VStack(spacing: 10) {
-                                ForEach(state.commuteJourneys.dropFirst().prefix(4)) { JourneyRow(journey: $0) }
+                                ForEach(state.commutePlanB) { JourneyRow(journey: $0) }
                             }
                         }
                         Text("Times from \(state.transit.sourceLabel). \"Unconfirmed\" means the vehicle is due soon but isn't reporting its position.")
