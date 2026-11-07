@@ -1,0 +1,61 @@
+name: Sli
+options:
+  bundleIdPrefix: ie.sli
+  deploymentTarget:
+    iOS: "27.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: ""
+    SWIFT_STRICT_CONCURRENCY: complete
+configFiles:
+  Debug: Config/Secrets.xcconfig
+  Release: Config/Secrets.xcconfig
+targets:
+  Sli:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sli
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ie.sli.app
+        PRODUCT_NAME: Sli
+        TARGETED_DEVICE_FAMILY: "1"
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Slí
+        INFOPLIST_KEY_UILaunchScreen_Generation: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations: UIInterfaceOrientationPortrait
+        INFOPLIST_KEY_NSLocationWhenInUseUsageDescription: Slí uses your location to show nearby stops, live arrivals and to share your position with friends you choose.
+        INFOPLIST_KEY_NSLocationAlwaysAndWhenInUseUsageDescription: When sharing is on, Slí updates your location in the background so friends in your plans can see your live ETA. You can pause anytime.
+        INFOPLIST_KEY_NSMotionUsageDescription: Slí uses motion data to verify transit trips for XP and streaks.
+        INFOPLIST_KEY_NSSupportsLiveActivities: YES
+    info:
+      path: Sli/Info.plist
+      properties:
+        SupabaseURL: $(SUPABASE_URL)
+        SupabaseAnonKey: $(SUPABASE_ANON_KEY)
+        LSApplicationQueriesSchemes: [leaptopup, tfigo]
+        UIBackgroundModes: [location]
+  SliTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources: [SliTests]
+    dependencies:
+      - target: Sli
+    settings:
+      base:
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  Sli:
+    build:
+      targets:
+        Sli: all
+        SliTests: [test]
+    test:
+      targets: [SliTests]
