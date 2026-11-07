@@ -40,8 +40,8 @@ def create_app(db_path: str | None = None, feed: RealtimeFeed | None = None,
 
     app = FastAPI(title="Slí transit API", lifespan=lifespan)
 
-    def cluster_or_404(cid: int) -> dict:
-        c = planner.get_cluster(db(), cid)
+    def cluster_or_404(conn: sqlite3.Connection, cid: int) -> dict:
+        c = planner.get_cluster(conn, cid)
         if not c:
             raise HTTPException(404, "unknown stop")
         return c
@@ -61,20 +61,22 @@ def create_app(db_path: str | None = None, feed: RealtimeFeed | None = None,
 
     @app.get("/api/stops/{stop_id}/arrivals")
     def arrivals(stop_id: int, window: int = Query(90, ge=10, le=360)):
-        stop = cluster_or_404(stop_id)
+        conn = db()  # one connection per request, so a DB swap can't mix timetables
+        stop = cluster_or_404(conn, stop_id)
         rt = state["feed"].get()
         now = clock()
         return {"now": now.isoformat(), "stop": stop, "realtime": rt is not None,
-                "arrivals": planner.stop_arrivals(db(), stop_id, now, window_min=window, realtime=rt)}
+                "arrivals": planner.stop_arrivals(conn, stop_id, now, window_min=window, realtime=rt)}
 
     @app.get("/api/departures")
     def deps(from_: int = Query(..., alias="from"), to: int = Query(...),
              walk: int = Query(5, ge=0, le=60), window: int = Query(120, ge=10, le=360)):
-        origin, dest = cluster_or_404(from_), cluster_or_404(to)
+        conn = db()
+        origin, dest = cluster_or_404(conn, from_), cluster_or_404(conn, to)
         rt = state["feed"].get()
         now = clock()
         return {"now": now.isoformat(), "from": origin, "to": dest, "realtime": rt is not None,
-                "departures": planner.departures(db(), from_, to, now, walk_min=walk,
+                "departures": planner.departures(conn, from_, to, now, walk_min=walk,
                                                  window_min=window, realtime=rt)}
 
     @app.get("/api/trip")
